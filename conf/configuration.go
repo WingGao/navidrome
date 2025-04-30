@@ -95,6 +95,7 @@ type configOptions struct {
 	Subsonic                        subsonicOptions
 
 	Agents       string
+	Wing         wingOptions
 	LastFM       lastfmOptions
 	Spotify      spotifyOptions
 	ListenBrainz listenBrainzOptions
@@ -163,6 +164,10 @@ type spotifyOptions struct {
 
 type listenBrainzOptions struct {
 	Enabled bool
+	BaseURL string
+}
+
+type wingOptions struct {
 	BaseURL string
 }
 

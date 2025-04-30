@@ -1,7 +1,13 @@
 package taglib
 
 import (
+	"bytes"
+	"encoding/json"
+	"github.com/navidrome/navidrome/conf"
+	"io"
 	"io/fs"
+	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,10 +22,10 @@ type extractor struct {
 	baseDir string
 }
 
-func (e extractor) Parse(files ...string) (map[string]metadata.Info, error) {
+func (e extractor) Parse2(files ...string) (map[string]metadata.Info, error) {
 	results := make(map[string]metadata.Info)
 	for _, path := range files {
-		props, err := e.extractMetadata(path)
+		props, err := e.extractMetadata2(path)
 		if err != nil {
 			continue
 		}
@@ -30,6 +36,40 @@ func (e extractor) Parse(files ...string) (map[string]metadata.Info, error) {
 
 func (e extractor) Version() string {
 	return Version()
+}
+
+type WingRep struct {
+	Files map[string]metadata.Info `json:"files"`
+}
+
+// 修改的
+func (e extractor) Parse(files ...string) (map[string]metadata.Info, error) {
+	results := make(map[string]metadata.Info)
+	if conf.Server.Wing.BaseURL != "" {
+		// 线获取内部的meta服务获取
+		reqJson, _ := json.Marshal(map[string]interface{}{
+			"files": files,
+		})
+		resp, err := http.Post(conf.Server.Wing.BaseURL+"/file_meta", "application/json", bytes.NewBuffer(reqJson))
+		if err == nil {
+			var respJson WingRep
+			json.NewDecoder(resp.Body).Decode(&respJson)
+			for p, info := range respJson.Files {
+				results[p] = info
+			}
+		}
+	}
+	// 如果没有则从文件获取
+	for _, path := range files {
+		if _, ok := results[path]; !ok {
+			props, err1 := e.extractMetadata(path)
+			if err1 != nil {
+				continue
+			}
+			results[path] = *props
+		}
+	}
+	return results, nil
 }
 
 func (e extractor) extractMetadata(filePath string) (*metadata.Info, error) {
