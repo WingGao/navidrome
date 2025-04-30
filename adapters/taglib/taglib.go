@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/navidrome/navidrome/conf"
-	"io"
 	"io/fs"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -25,7 +23,7 @@ type extractor struct {
 func (e extractor) Parse2(files ...string) (map[string]metadata.Info, error) {
 	results := make(map[string]metadata.Info)
 	for _, path := range files {
-		props, err := e.extractMetadata2(path)
+		props, err := e.extractMetadata(path)
 		if err != nil {
 			continue
 		}
@@ -59,15 +57,19 @@ func (e extractor) Parse(files ...string) (map[string]metadata.Info, error) {
 			}
 		}
 	}
-	// 如果没有则从文件获取
 	for _, path := range files {
-		if _, ok := results[path]; !ok {
-			props, err1 := e.extractMetadata(path)
-			if err1 != nil {
-				continue
-			}
-			results[path] = *props
+		props, err1 := e.extractMetadata(path)
+		if err1 != nil {
+			continue
 		}
+		// 替换py的tag
+		if pyRep, ok := results[path]; ok {
+			for k, v := range pyRep.Tags {
+				props.Tags[k] = v
+			}
+		}
+		//fmt.Printf("%+v\n", props)
+		results[path] = *props
 	}
 	return results, nil
 }

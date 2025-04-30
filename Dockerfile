@@ -2,7 +2,7 @@ FROM --platform=$BUILDPLATFORM ghcr.io/crazy-max/osxcross:14.5-debian AS osxcros
 
 ########################################################################################################################
 ### Build xx (orignal image: tonistiigi/xx)
-FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/alpine:3.21 AS xx-build
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.21 AS xx-build
 
 # v1.5.0
 ENV XX_VERSION=b4e4c451c778822e6742bfc9d9a91d7c7d885c8a
@@ -26,25 +26,27 @@ COPY --from=xx-build /out/ /usr/bin/
 
 ########################################################################################################################
 ### Get TagLib
-FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/alpine:3.21 AS taglib-build
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.21 AS taglib-build
 ARG TARGETPLATFORM
 ARG CROSS_TAGLIB_VERSION=2.0.2-1
 ENV CROSS_TAGLIB_RELEASES_URL=https://github.com/navidrome/cross-taglib/releases/download/v${CROSS_TAGLIB_VERSION}/
 
+ENV MYLIB=taglib-linux-amd64-2.0.2-1.tar.gz
+COPY var/taglib-linux-amd64-2.0.2-1.tar.gz ./
 RUN <<EOT
     PLATFORM=$(echo ${TARGETPLATFORM} | tr '/' '-')
     FILE=taglib-${PLATFORM}.tar.gz
 
     DOWNLOAD_URL=${CROSS_TAGLIB_RELEASES_URL}${FILE}
-    wget ${DOWNLOAD_URL}
-
+#    wget ${DOWNLOAD_URL}
+    ls -al taglib-linux-amd64-2.0.2-1.tar.gz
     mkdir /taglib
-    tar -xzf ${FILE} -C /taglib
+    tar -xzf taglib-linux-amd64-2.0.2-1.tar.gz -C /taglib
 EOT
 
 ########################################################################################################################
 ### Build Navidrome UI
-FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/node:lts-alpine AS ui
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/node:lts-alpine AS ui
 WORKDIR /app
 
 # Install node dependencies
@@ -61,7 +63,7 @@ COPY --from=ui /build /build
 
 ########################################################################################################################
 ### Build Navidrome binary
-FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/golang:1.24-bookworm AS base
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/golang:1.24-bookworm AS base
 RUN apt-get update && apt-get install -y clang lld
 COPY --from=xx / /
 WORKDIR /workspace
@@ -120,7 +122,7 @@ COPY --from=build /out /
 
 ########################################################################################################################
 ### Build Final Image
-FROM public.ecr.aws/docker/library/alpine:3.21 AS final
+FROM m.daocloud.io/docker.io/library/alpine:3.21 AS final
 LABEL maintainer="deluan@navidrome.org"
 LABEL org.opencontainers.image.source="https://github.com/navidrome/navidrome"
 
