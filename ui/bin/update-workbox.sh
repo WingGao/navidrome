@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-set -e
+#set -e
 
 export WORKBOX_DIR=public/3rdparty/workbox
 

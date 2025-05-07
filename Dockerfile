@@ -6,7 +6,7 @@ FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.21 AS xx
 
 # v1.5.0
 ENV XX_VERSION=b4e4c451c778822e6742bfc9d9a91d7c7d885c8a
-
+RUN sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirrors.tuna.tsinghua.edu.cn/alpine#g' /etc/apk/repositories
 RUN apk add -U --no-cache git
 RUN git clone https://github.com/tonistiigi/xx && \
     cd xx && \
@@ -31,22 +31,15 @@ ARG TARGETPLATFORM
 ARG CROSS_TAGLIB_VERSION=2.0.2-1
 ENV CROSS_TAGLIB_RELEASES_URL=https://github.com/navidrome/cross-taglib/releases/download/v${CROSS_TAGLIB_VERSION}/
 
-ENV MYLIB=taglib-linux-amd64-2.0.2-1.tar.gz
-COPY var/taglib-linux-amd64-2.0.2-1.tar.gz ./
-RUN <<EOT
-    PLATFORM=$(echo ${TARGETPLATFORM} | tr '/' '-')
-    FILE=taglib-${PLATFORM}.tar.gz
+COPY var/taglib-linux-amd64.tar.gz /tmp
+RUN mkdir /taglib && \
+    tar -xzf /tmp/taglib-linux-amd64.tar.gz -C /taglib
 
-    DOWNLOAD_URL=${CROSS_TAGLIB_RELEASES_URL}${FILE}
-#    wget ${DOWNLOAD_URL}
-    ls -al taglib-linux-amd64-2.0.2-1.tar.gz
-    mkdir /taglib
-    tar -xzf taglib-linux-amd64-2.0.2-1.tar.gz -C /taglib
-EOT
+RUN ls -la /taglib
 
 ########################################################################################################################
 ### Build Navidrome UI
-FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/node:lts-alpine AS ui
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/node:20-alpine AS ui
 WORKDIR /app
 
 # Install node dependencies
@@ -56,6 +49,7 @@ RUN npm ci
 
 # Build bundle
 COPY ui/ ./
+RUN npm config set registry https://registry.npmmirror.com
 RUN npm run build -- --outDir=/build
 
 FROM scratch AS ui-bundle
@@ -64,12 +58,15 @@ COPY --from=ui /build /build
 ########################################################################################################################
 ### Build Navidrome binary
 FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/golang:1.24-bookworm AS base
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
+    sed -i 's|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
+
 RUN apt-get update && apt-get install -y clang lld
 COPY --from=xx / /
 WORKDIR /workspace
 
 FROM --platform=$BUILDPLATFORM base AS build
-
+COPY --from=taglib-build /taglib /taglib
 # Install build dependencies for the target platform
 ARG TARGETPLATFORM
 
@@ -89,7 +86,7 @@ RUN --mount=type=bind,source=. \
     --mount=from=osxcross,src=/osxcross/SDK,target=/xx-sdk,ro \
     --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
-    --mount=from=taglib-build,target=/taglib,src=/taglib,ro <<EOT
+    <<EOT
 
     # Setup CGO cross-compilation environment
     xx-go --wrap
@@ -126,6 +123,7 @@ FROM m.daocloud.io/docker.io/library/alpine:3.21 AS final
 LABEL maintainer="deluan@navidrome.org"
 LABEL org.opencontainers.image.source="https://github.com/navidrome/navidrome"
 
+RUN sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirrors.tuna.tsinghua.edu.cn/alpine#g' /etc/apk/repositories
 # Install ffmpeg and mpv
 RUN apk add -U --no-cache ffmpeg mpv sqlite
 
