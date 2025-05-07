@@ -127,19 +127,19 @@ main:
     aliases: [ txxx:catalognumber, catalognumber, ----:com.apple.itunes:catalognumber, wm/catalogno ]
   musicbrainz_artistid:
     aliases: [ txxx:musicbrainz artist id, musicbrainz_artistid, musicbrainz artist id, ----:com.apple.itunes:musicbrainz artist id, musicbrainz/artist id ]
-    type: uuid
+#    type: uuid
   musicbrainz_recordingid:
     aliases: [ ufid:http://musicbrainz.org, musicbrainz_trackid, musicbrainz track id, ----:com.apple.itunes:musicbrainz track id, musicbrainz/track id ]
     type: uuid
   musicbrainz_trackid:
     aliases: [txxx:musicbrainz release track id, musicbrainz_releasetrackid, ----:com.apple.itunes:musicbrainz release track id, musicbrainz/release track id]
-    type: uuid
+#    type: uuid
   musicbrainz_albumartistid:
     aliases: [ txxx:musicbrainz album artist id, musicbrainz_albumartistid, musicbrainz album artist id, ----:com.apple.itunes:musicbrainz album artist id, musicbrainz/album artist id ]
-    type: uuid
+#    type: uuid
   musicbrainz_albumid:
     aliases: [ txxx:musicbrainz album id, musicbrainz_albumid, musicbrainz album id, ----:com.apple.itunes:musicbrainz album id, musicbrainz/album id ]
-    type: uuid
+#    type: uuid
   musicbrainz_releasegroupid:
     aliases: [ txxx:musicbrainz release group id, musicbrainz_releasegroupid, ----:com.apple.itunes:musicbrainz release group id, musicbrainz/release group id ]
     type: uuid
