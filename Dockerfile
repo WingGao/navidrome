@@ -2,7 +2,7 @@ FROM --platform=$BUILDPLATFORM ghcr.io/crazy-max/osxcross:14.5-debian AS osxcros
 
 ########################################################################################################################
 ### Build xx (orignal image: tonistiigi/xx)
-FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.21 AS xx-build
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.19 AS xx-build
 
 # v1.5.0
 ENV XX_VERSION=b4e4c451c778822e6742bfc9d9a91d7c7d885c8a
@@ -26,9 +26,9 @@ COPY --from=xx-build /out/ /usr/bin/
 
 ########################################################################################################################
 ### Get TagLib
-FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.21 AS taglib-build
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.19 AS taglib-build
 ARG TARGETPLATFORM
-ARG CROSS_TAGLIB_VERSION=2.0.2-1
+ARG CROSS_TAGLIB_VERSION=2.1.1-1
 ENV CROSS_TAGLIB_RELEASES_URL=https://github.com/navidrome/cross-taglib/releases/download/v${CROSS_TAGLIB_VERSION}/
 
 COPY var/taglib-linux-amd64.tar.gz /tmp
@@ -39,7 +39,7 @@ RUN ls -la /taglib
 
 ########################################################################################################################
 ### Build Navidrome UI
-FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/node:20-alpine AS ui
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/node:lts-alpine AS ui
 WORKDIR /app
 
 # Install node dependencies
@@ -119,7 +119,7 @@ COPY --from=build /out /
 
 ########################################################################################################################
 ### Build Final Image
-FROM m.daocloud.io/docker.io/library/alpine:3.21 AS final
+FROM m.daocloud.io/docker.io/library/alpine:3.19 AS final
 LABEL maintainer="deluan@navidrome.org"
 LABEL org.opencontainers.image.source="https://github.com/navidrome/navidrome"
 

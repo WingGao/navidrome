@@ -139,7 +139,9 @@ func compileSplitRegex(tagName TagName, split []string) *regexp.Regexp {
 	}
 	// If no valid separators remain, return the original value.
 	if len(escaped) == 0 {
-		log.Warn("No valid separators found in split list", "split", split, "tag", tagName)
+		if len(split) > 0 {
+			log.Warn("No valid separators found in split list", "split", split, "tag", tagName)
+		}
 		return nil
 	}
 
@@ -147,7 +149,7 @@ func compileSplitRegex(tagName TagName, split []string) *regexp.Regexp {
 	pattern := "(?i)(" + strings.Join(escaped, "|") + ")"
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		log.Error("Error compiling regexp", "pattern", pattern, "tag", tagName, "err", err)
+		log.Warn("Error compiling regexp for split list", "pattern", pattern, "tag", tagName, "split", split, err)
 		return nil
 	}
 	return re
@@ -158,6 +160,17 @@ func tagNames() []string {
 	names := make([]string, 0, len(mappings))
 	for k := range mappings {
 		names = append(names, string(k))
+	}
+	return names
+}
+
+func numericTagNames() []string {
+	mappings := TagMappings()
+	names := make([]string, 0)
+	for k, cfg := range mappings {
+		if cfg.Type == TagTypeInteger || cfg.Type == TagTypeFloat {
+			names = append(names, string(k))
+		}
 	}
 	return names
 }
@@ -228,5 +241,6 @@ func init() {
 		// used in smart playlists
 		criteria.AddRoles(slices.Collect(maps.Keys(AllRoles)))
 		criteria.AddTagNames(tagNames())
+		criteria.AddNumericTags(numericTagNames())
 	})
 }

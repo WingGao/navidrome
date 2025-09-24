@@ -47,7 +47,8 @@ func (r *playlistRepository) Tracks(playlistId string, refreshSmartPlaylist bool
 	p.db = r.db
 	p.tableName = "playlist_tracks"
 	p.registerModel(&model.PlaylistTrack{}, map[string]filterFunc{
-		"missing": booleanFilter,
+		"missing":    booleanFilter,
+		"library_id": libraryIdFilter,
 	})
 	p.setSortMappings(
 		map[string]string{
@@ -84,11 +85,12 @@ func (r *playlistTrackRepository) Count(options ...rest.QueryOptions) (int64, er
 }
 
 func (r *playlistTrackRepository) Read(id string) (interface{}, error) {
+	userID := loggedUser(r.ctx).ID
 	sel := r.newSelect().
 		LeftJoin("annotation on ("+
 			"annotation.item_id = media_file_id"+
 			" AND annotation.item_type = 'media_file'"+
-			" AND annotation.user_id = '"+userId(r.ctx)+"')").
+			" AND annotation.user_id = '"+userID+"')").
 		Columns(
 			"coalesce(starred, 0) as starred",
 			"coalesce(play_count, 0) as play_count",
@@ -99,10 +101,10 @@ func (r *playlistTrackRepository) Read(id string) (interface{}, error) {
 			"playlist_tracks.*",
 		).
 		Join("media_file f on f.id = media_file_id").
-		Where(And{Eq{"playlist_id": r.playlistId}, Eq{"id": id}})
+		Where(And{Eq{"playlist_id": r.playlistId}, Eq{"playlist_tracks.id": id}})
 	var trk dbPlaylistTrack
 	err := r.queryOne(sel, &trk)
-	return trk.PlaylistTrack.MediaFile, err
+	return trk.PlaylistTrack, err
 }
 
 func (r *playlistTrackRepository) GetAll(options ...model.QueryOptions) (model.PlaylistTracks, error) {
