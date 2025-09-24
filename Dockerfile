@@ -76,6 +76,8 @@ RUN xx-verify --setup
 RUN --mount=type=bind,source=. \
     --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
+    go env -w GO111MODULE=on && \
+    go env -w GOPROXY=https://goproxy.cn,direct && \
     go mod download
 
 ARG GIT_SHA

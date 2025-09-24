@@ -3,7 +3,6 @@ package taglib
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/navidrome/navidrome/conf"
 	"io/fs"
 	"net/http"
 	"path/filepath"
