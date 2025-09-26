@@ -9,6 +9,9 @@
   "permissions": {
     "http": {
       "reason": "和本地wingpy-qqmusic-web通信",
+      "allowedUrls": {
+        "*": ["GET"]
+      },
       "allowLocalNetwork": true
     }
   }

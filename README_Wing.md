@@ -1,6 +1,21 @@
 
 
+## 插件
 
+又实现了一个插件，可以单独编译
+
+```bash
+cd plugins/examples
+make qqmusic
+```
+
+添加配置
+```toml
+[PluginConfig.wing-qqmusic]
+baseURL = "http://192.168.3.50:12000"
+```
+
+## 源码修改
 
 ### 修改
 

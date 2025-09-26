@@ -9,6 +9,9 @@ subsonicapi-demo: subsonicapi-demo/plugin.wasm
 wikimedia/plugin.wasm: wikimedia/plugin.go
 	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o $@ ./wikimedia
 
+qqmusic: wing-qqmusic/plugin.go
+	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o wing-qqmusic/plugin.wasm ./wing-qqmusic
+
 coverartarchive/plugin.wasm: coverartarchive/plugin.go
 	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o $@ ./coverartarchive
 
