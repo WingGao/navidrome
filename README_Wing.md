@@ -1,5 +1,11 @@
 
-添加一个agent，直接读取qq音乐的信息
+
+
+
+### 修改
+
+添加一个agent，直接读取qq音乐的信息 `core/agents/wingqq`
+
 
 ### 打包
 ```bash
