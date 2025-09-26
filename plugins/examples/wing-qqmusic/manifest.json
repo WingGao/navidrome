@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/navidrome/navidrome/refs/heads/master/plugins/schema/manifest.schema.json",
+  "name": "wing-qqmusic",
+  "author": "WingGao",
+  "version": "1.0.0",
+  "description": "QQ音乐信息获取",
+  "website": "https://github.com/WingGao/navidrome/tree/wing/pytag/plugins/examples/wing-qqmusic",
+  "capabilities": ["MetadataAgent"],
+  "permissions": {
+    "http": {
+      "reason": "和本地wingpy-qqmusic-web通信",
+      "allowedUrls": {
+        "*": ["GET"]
+      },
+      "allowLocalNetwork": true
+    }
+  }
+}
