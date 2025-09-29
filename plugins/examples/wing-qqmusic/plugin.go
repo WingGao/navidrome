@@ -1,4 +1,4 @@
-//go:build wasip1
+//1go:build wasip1
 
 package main
 
@@ -24,22 +24,27 @@ var (
 	ErrNotImplemented = api.ErrNotImplemented
 
 	client         = http.NewHttpService()
-	baseURL string = ""
+	baseURL string = "http://192.168.3.50:12000"
 )
+
+type AlbumInfoWithImage struct {
+	api.AlbumInfo
+	Images []*api.ExternalImage `json:"images,omitempty"`
+}
 
 type WingQQMusicAgent struct{}
 
-func (WingQQMusicAgent) OnInit(ctx context.Context, req *api.InitRequest) (*api.InitResponse, error) {
-	log.Printf("WingQQMusicAgent Plugin initializing...")
-	//if _baseURL, ok := req.Config["base_url"]; !ok || _baseURL == "" {
-	//	return &api.InitResponse{Error: "baseurl configuration is required"}, nil
-	//} else {
-	//	baseURL = _baseURL
-	//	log.Printf("Using baseURL: %s", baseURL)
-	//}
-	baseURL = "http://192.168.3.50:12000"
-	return &api.InitResponse{}, nil
-}
+//func (WingQQMusicAgent) OnInit(ctx context.Context, req *api.InitRequest) (*api.InitResponse, error) {
+//	log.Printf("WingQQMusicAgent Plugin initializing...")
+//	//if _baseURL, ok := req.Config["base_url"]; !ok || _baseURL == "" {
+//	//	return &api.InitResponse{Error: "baseurl configuration is required"}, nil
+//	//} else {
+//	//	baseURL = _baseURL
+//	//	log.Printf("Using baseURL: %s", baseURL)
+//	//}
+//	baseURL = "http://192.168.3.50:12000"
+//	return &api.InitResponse{}, nil
+//}
 
 // GetArtistURL is not implemented for Wing QQ Music
 func (WingQQMusicAgent) GetArtistURL(ctx context.Context, req *api.ArtistURLRequest) (*api.ArtistURLResponse, error) {
@@ -85,11 +90,10 @@ func (WingQQMusicAgent) GetSimilarArtists(context.Context, *api.ArtistSimilarReq
 func (WingQQMusicAgent) GetArtistTopSongs(context.Context, *api.ArtistTopSongsRequest) (*api.ArtistTopSongsResponse, error) {
 	return nil, ErrNotImplemented
 }
-func (WingQQMusicAgent) GetAlbumInfo(ctx context.Context, req *api.AlbumInfoRequest) (*api.AlbumInfoResponse, error) {
+
+func getAlbumInfo(ctx context.Context, mbid string) (*AlbumInfoWithImage, error) {
 	params := map[string]string{
-		"name":   req.Name,
-		"artist": req.Artist,
-		"mbid":   req.Mbid,
+		"mbid": mbid,
 	}
 
 	resp, err := get(ctx, "/nv_album", params)
@@ -97,16 +101,26 @@ func (WingQQMusicAgent) GetAlbumInfo(ctx context.Context, req *api.AlbumInfoRequ
 		return nil, err
 	}
 
-	var albumInfo api.AlbumInfoResponse
+	var albumInfo AlbumInfoWithImage
 	if err := json.Unmarshal(resp.Body, &albumInfo); err != nil {
 		return nil, fmt.Errorf("failed to decode album info response: %v", err)
 	}
-
 	return &albumInfo, nil
 }
+func (WingQQMusicAgent) GetAlbumInfo(ctx context.Context, req *api.AlbumInfoRequest) (*api.AlbumInfoResponse, error) {
+	resp, err := getAlbumInfo(ctx, req.Mbid)
+	if err != nil {
+		return nil, err
+	}
+	return &api.AlbumInfoResponse{Info: &resp.AlbumInfo}, nil
+}
 
-func (WingQQMusicAgent) GetAlbumImages(context.Context, *api.AlbumImagesRequest) (*api.AlbumImagesResponse, error) {
-	return nil, ErrNotImplemented
+func (WingQQMusicAgent) GetAlbumImages(ctx context.Context, req *api.AlbumImagesRequest) (*api.AlbumImagesResponse, error) {
+	resp, err := getAlbumInfo(ctx, req.Mbid)
+	if err != nil {
+		return nil, err
+	}
+	return &api.AlbumImagesResponse{Images: resp.Images}, nil
 }
 
 // Helper method to make HTTP GET requests

@@ -19,7 +19,10 @@ baseURL = "http://192.168.3.50:12000"
 
 ### 修改
 
+
 添加一个agent，直接读取qq音乐的信息 `core/agents/wingqq`
+
+修改 `adapters/taglib/taglib.go` , 直接通过接口获取文件媒体信息
 
 
 ### 打包

@@ -15,6 +15,7 @@ import (
 
 const wingqqAgentName = "wingqq"
 
+// Deprecated: 请使用Plugin
 type wingAgent struct {
 	ds      model.DataStore
 	baseURL string
