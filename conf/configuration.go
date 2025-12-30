@@ -20,6 +20,7 @@ import (
 )
 
 type configOptions struct {
+	Wing         wingOptions
 	ConfigFile                      string
 	Address                         string
 	Port                            int
@@ -41,6 +42,7 @@ type configOptions struct {
 	UIWelcomeMessage                string
 	MaxSidebarPlaylists             int
 	EnableTranscodingConfig         bool
+	EnableTranscodingCancellation   bool
 	EnableDownloads                 bool
 	EnableExternalServices          bool
 	EnableInsightsCollector         bool
@@ -86,12 +88,10 @@ type configOptions struct {
 	AuthRequestLimit                int
 	AuthWindowLength                time.Duration
 	PasswordEncryptionKey           string
-	ReverseProxyUserHeader          string
-	ReverseProxyWhitelist           string
-	Wing         wingOptions
+	ExtAuth                         extAuthOptions
 	Plugins                         pluginsOptions
 	PluginConfig                    map[string]map[string]string
-	HTTPSecurityHeaders             secureOptions       `json:",omitzero"`
+	HTTPHeaders                     httpHeaderOptions   `json:",omitzero"`
 	Prometheus                      prometheusOptions   `json:",omitzero"`
 	Scanner                         scannerOptions      `json:",omitzero"`
 	Jukebox                         jukeboxOptions      `json:",omitzero"`
@@ -103,34 +103,38 @@ type configOptions struct {
 	Spotify                         spotifyOptions      `json:",omitzero"`
 	Deezer                          deezerOptions       `json:",omitzero"`
 	ListenBrainz                    listenBrainzOptions `json:",omitzero"`
-	Tags                            map[string]TagConf  `json:",omitempty"`
+	EnableScrobbleHistory           bool
+	Tags                            map[string]TagConf `json:",omitempty"`
 	Agents                          string
 
 	// DevFlags. These are used to enable/disable debugging and incomplete features
-	DevLogLevels                     map[string]string `json:",omitempty"`
-	DevLogSourceLine                 bool
-	DevEnableProfiler                bool
-	DevAutoCreateAdminPassword       string
-	DevAutoLoginUsername             string
-	DevActivityPanel                 bool
-	DevActivityPanelUpdateRate       time.Duration
-	DevSidebarPlaylists              bool
-	DevShowArtistPage                bool
-	DevUIShowConfig                  bool
-	DevNewEventStream                bool
-	DevOffsetOptimize                int
-	DevArtworkMaxRequests            int
-	DevArtworkThrottleBacklogLimit   int
-	DevArtworkThrottleBacklogTimeout time.Duration
-	DevArtistInfoTimeToLive          time.Duration
-	DevAlbumInfoTimeToLive           time.Duration
-	DevExternalScanner               bool
-	DevScannerThreads                uint
-	DevInsightsInitialDelay          time.Duration
-	DevEnablePlayerInsights          bool
-	DevEnablePluginsInsights         bool
-	DevPluginCompilationTimeout      time.Duration
-	DevExternalArtistFetchMultiplier float64
+	DevLogLevels                      map[string]string `json:",omitempty"`
+	DevLogSourceLine                  bool
+	DevEnableProfiler                 bool
+	DevAutoCreateAdminPassword        string
+	DevAutoLoginUsername              string
+	DevActivityPanel                  bool
+	DevActivityPanelUpdateRate        time.Duration
+	DevSidebarPlaylists               bool
+	DevShowArtistPage                 bool
+	DevUIShowConfig                   bool
+	DevNewEventStream                 bool
+	DevOffsetOptimize                 int
+	DevArtworkMaxRequests             int
+	DevArtworkThrottleBacklogLimit    int
+	DevArtworkThrottleBacklogTimeout  time.Duration
+	DevArtistInfoTimeToLive           time.Duration
+	DevAlbumInfoTimeToLive            time.Duration
+	DevExternalScanner                bool
+	DevScannerThreads                 uint
+	DevSelectiveWatcher               bool
+	DevInsightsInitialDelay           time.Duration
+	DevEnablePlayerInsights           bool
+	DevEnablePluginsInsights          bool
+	DevPluginCompilationTimeout       time.Duration
+	DevExternalArtistFetchMultiplier  float64
+	DevOptimizeDB                     bool
+	DevPreserveUnicodeInExternalCalls bool
 }
 
 type scannerOptions struct {
@@ -176,7 +180,8 @@ type spotifyOptions struct {
 }
 
 type deezerOptions struct {
-	Enabled bool
+	Enabled  bool
+	Language string
 }
 
 type listenBrainzOptions struct {
@@ -188,8 +193,9 @@ type wingOptions struct {
 	BaseURL string
 }
 
-type secureOptions struct {
-	CustomFrameOptionsValue string
+
+type httpHeaderOptions struct {
+	FrameOptions string
 }
 
 type prometheusOptions struct {
@@ -231,6 +237,11 @@ type pluginsOptions struct {
 	CacheSize string
 }
 
+type extAuthOptions struct {
+	TrustedSources string
+	UserHeader     string
+}
+
 var (
 	Server = &configOptions{}
 	hooks  []func()
@@ -248,6 +259,11 @@ func LoadFromFile(confFile string) {
 
 func Load(noConfigDump bool) {
 	parseIniFileConfiguration()
+
+	// Map deprecated options to their new names for backwards compatibility
+	mapDeprecatedOption("ReverseProxyWhitelist", "ExtAuth.TrustedSources")
+	mapDeprecatedOption("ReverseProxyUserHeader", "ExtAuth.UserHeader")
+	mapDeprecatedOption("HTTPSecurityHeaders.CustomFrameOptionsValue", "HTTPHeaders.FrameOptions")
 
 	err := viper.Unmarshal(&Server)
 	if err != nil {
@@ -332,9 +348,18 @@ func Load(noConfigDump bool) {
 		Server.BaseScheme = u.Scheme
 	}
 
+	// Log configuration source
+	if Server.ConfigFile != "" {
+		log.Info("Loaded configuration", "file", Server.ConfigFile)
+	} else if hasNDEnvVars() {
+		log.Info("No configuration file found. Loaded configuration only from environment variables")
+	} else {
+		log.Warn("No configuration file found. Using default values. To specify a config file, use the --configfile flag or set the ND_CONFIGFILE environment variable.")
+	}
+
 	// Print current configuration if log level is Debug
 	if log.IsGreaterOrEqualTo(log.LevelDebug) && !noConfigDump {
-		prettyConf := pretty.Sprintf("Loaded configuration from '%s': %# v", Server.ConfigFile, Server)
+		prettyConf := pretty.Sprintf("Configuration: %# v", Server)
 		if Server.EnableLogRedacting {
 			prettyConf = log.Redact(prettyConf)
 		}
@@ -349,9 +374,12 @@ func Load(noConfigDump bool) {
 		log.Warn(fmt.Sprintf("Extractor '%s' is not implemented, using 'taglib'", Server.Scanner.Extractor))
 		Server.Scanner.Extractor = consts.DefaultScannerExtractor
 	}
-	logDeprecatedOptions("Scanner.GenreSeparators")
-	logDeprecatedOptions("Scanner.GroupAlbumReleases")
-	logDeprecatedOptions("DevEnableBufferedScrobble") // Deprecated: Buffered scrobbling is now always enabled and this option is ignored
+	logDeprecatedOptions("Scanner.GenreSeparators", "")
+	logDeprecatedOptions("Scanner.GroupAlbumReleases", "")
+	logDeprecatedOptions("DevEnableBufferedScrobble", "") // Deprecated: Buffered scrobbling is now always enabled and this option is ignored
+	logDeprecatedOptions("ReverseProxyWhitelist", "ExtAuth.TrustedSources")
+	logDeprecatedOptions("ReverseProxyUserHeader", "ExtAuth.UserHeader")
+	logDeprecatedOptions("HTTPSecurityHeaders.CustomFrameOptionsValue", "HTTPHeaders.FrameOptions")
 
 	// Call init hooks
 	for _, hook := range hooks {
@@ -359,15 +387,29 @@ func Load(noConfigDump bool) {
 	}
 }
 
-func logDeprecatedOptions(options ...string) {
-	for _, option := range options {
-		envVar := "ND_" + strings.ToUpper(strings.ReplaceAll(option, ".", "_"))
-		if os.Getenv(envVar) != "" {
-			log.Warn(fmt.Sprintf("Option '%s' is deprecated and will be ignored in a future release", envVar))
+func logDeprecatedOptions(oldName, newName string) {
+	envVar := "ND_" + strings.ToUpper(strings.ReplaceAll(oldName, ".", "_"))
+	newEnvVar := "ND_" + strings.ToUpper(strings.ReplaceAll(newName, ".", "_"))
+	logWarning := func(oldName, newName string) {
+		if newName != "" {
+			log.Warn(fmt.Sprintf("Option '%s' is deprecated and will be ignored in a future release. Please use the new '%s'", oldName, newName))
+		} else {
+			log.Warn(fmt.Sprintf("Option '%s' is deprecated and will be ignored in a future release", oldName))
 		}
-		if viper.InConfig(option) {
-			log.Warn(fmt.Sprintf("Option '%s' is deprecated and will be ignored in a future release", option))
-		}
+	}
+	if os.Getenv(envVar) != "" {
+		logWarning(envVar, newEnvVar)
+	}
+	if viper.InConfig(oldName) {
+		logWarning(oldName, newName)
+	}
+}
+
+// mapDeprecatedOption is used to provide backwards compatibility for deprecated options. It should be called after
+// the config has been read by viper, but before unmarshalling it into the Config struct.
+func mapDeprecatedOption(legacyName, newName string) {
+	if viper.IsSet(legacyName) {
+		viper.Set(newName, viper.Get(legacyName))
 	}
 }
 
@@ -430,7 +472,7 @@ func validatePurgeMissingOption() error {
 		}
 	}
 	if !valid {
-		err := fmt.Errorf("Invalid Scanner.PurgeMissing value: '%s'. Must be one of: %v", Server.Scanner.PurgeMissing, allowedValues)
+		err := fmt.Errorf("invalid Scanner.PurgeMissing value: '%s'. Must be one of: %v", Server.Scanner.PurgeMissing, allowedValues)
 		log.Error(err.Error())
 		Server.Scanner.PurgeMissing = consts.PurgeMissingNever
 		return err
@@ -477,6 +519,16 @@ func AddHook(hook func()) {
 	hooks = append(hooks, hook)
 }
 
+// hasNDEnvVars checks if any ND_ prefixed environment variables are set (excluding ND_CONFIGFILE)
+func hasNDEnvVars() bool {
+	for _, env := range os.Environ() {
+		if strings.HasPrefix(env, "ND_") && !strings.HasPrefix(env, "ND_CONFIGFILE=") {
+			return true
+		}
+	}
+	return false
+}
+
 func setViperDefaults() {
 	viper.SetDefault("musicfolder", filepath.Join(".", "music"))
 	viper.SetDefault("cachefolder", "")
@@ -494,6 +546,7 @@ func setViperDefaults() {
 	viper.SetDefault("uiwelcomemessage", "")
 	viper.SetDefault("maxsidebarplaylists", consts.DefaultMaxSidebarPlaylists)
 	viper.SetDefault("enabletranscodingconfig", false)
+	viper.SetDefault("enabletranscodingcancellation", false)
 	viper.SetDefault("transcodingcachesize", "100MB")
 	viper.SetDefault("imagecachesize", "100MB")
 	viper.SetDefault("albumplaycountmode", consts.AlbumPlayCountModeAbsolute)
@@ -538,8 +591,8 @@ func setViperDefaults() {
 	viper.SetDefault("authrequestlimit", 5)
 	viper.SetDefault("authwindowlength", 20*time.Second)
 	viper.SetDefault("passwordencryptionkey", "")
-	viper.SetDefault("reverseproxyuserheader", "Remote-User")
-	viper.SetDefault("reverseproxywhitelist", "")
+	viper.SetDefault("extauth.userheader", "Remote-User")
+	viper.SetDefault("extauth.trustedsources", "")
 	viper.SetDefault("prometheus.enabled", false)
 	viper.SetDefault("prometheus.metricspath", consts.PrometheusDefaultPath)
 	viper.SetDefault("prometheus.password", "")
@@ -560,7 +613,7 @@ func setViperDefaults() {
 	viper.SetDefault("subsonic.appendsubtitle", true)
 	viper.SetDefault("subsonic.artistparticipations", false)
 	viper.SetDefault("subsonic.defaultreportrealpath", false)
-	viper.SetDefault("subsonic.legacyclients", "DSub")
+	viper.SetDefault("subsonic.legacyclients", "DSub,SubMusic")
 	viper.SetDefault("agents", "lastfm,spotify,deezer")
 	viper.SetDefault("lastfm.enabled", true)
 	viper.SetDefault("lastfm.language", "en")
@@ -570,9 +623,11 @@ func setViperDefaults() {
 	viper.SetDefault("spotify.id", "")
 	viper.SetDefault("spotify.secret", "")
 	viper.SetDefault("deezer.enabled", true)
+	viper.SetDefault("deezer.language", "en")
 	viper.SetDefault("listenbrainz.enabled", true)
 	viper.SetDefault("listenbrainz.baseurl", "https://api.listenbrainz.org/1/")
-	viper.SetDefault("httpsecurityheaders.customframeoptionsvalue", "DENY")
+	viper.SetDefault("enablescrobblehistory", true)
+	viper.SetDefault("httpheaders.frameoptions", "DENY")
 	viper.SetDefault("backup.path", "")
 	viper.SetDefault("backup.schedule", "")
 	viper.SetDefault("backup.count", 0)
@@ -605,20 +660,28 @@ func setViperDefaults() {
 	viper.SetDefault("devalbuminfotimetolive", consts.AlbumInfoTimeToLive)
 	viper.SetDefault("devexternalscanner", true)
 	viper.SetDefault("devscannerthreads", 5)
+	viper.SetDefault("devselectivewatcher", true)
 	viper.SetDefault("devinsightsinitialdelay", consts.InsightsInitialDelay)
 	viper.SetDefault("devenableplayerinsights", true)
 	viper.SetDefault("devenablepluginsinsights", true)
 	viper.SetDefault("devplugincompilationtimeout", time.Minute)
 	viper.SetDefault("devexternalartistfetchmultiplier", 1.5)
+	viper.SetDefault("devoptimizedb", true)
+	viper.SetDefault("devpreserveunicodeinexternalcalls", false)
 }
 
 func init() {
 	setViperDefaults()
 }
 
-func InitConfig(cfgFile string) {
+func InitConfig(cfgFile string, loadEnvVars bool) {
 	codecRegistry := viper.NewCodecRegistry()
-	_ = codecRegistry.RegisterCodec("ini", ini.Codec{})
+	_ = codecRegistry.RegisterCodec("ini", ini.Codec{
+		LoadOptions: ini.LoadOptions{
+			UnescapeValueDoubleQuotes:   true,
+			UnescapeValueCommentSymbols: true,
+		},
+	})
 	viper.SetOptions(viper.WithCodecRegistry(codecRegistry))
 
 	cfgFile = getConfigFile(cfgFile)
@@ -632,10 +695,12 @@ func InitConfig(cfgFile string) {
 	}
 
 	_ = viper.BindEnv("port")
-	viper.SetEnvPrefix("ND")
-	replacer := strings.NewReplacer(".", "_")
-	viper.SetEnvKeyReplacer(replacer)
-	viper.AutomaticEnv()
+	if loadEnvVars {
+		viper.SetEnvPrefix("ND")
+		replacer := strings.NewReplacer(".", "_")
+		viper.SetEnvKeyReplacer(replacer)
+		viper.AutomaticEnv()
+	}
 
 	err := viper.ReadInConfig()
 	if viper.ConfigFileUsed() != "" && err != nil {

@@ -1,12 +1,14 @@
 FROM --platform=$BUILDPLATFORM ghcr.io/crazy-max/osxcross:14.5-debian AS osxcross
 
 ########################################################################################################################
-### Build xx (orignal image: tonistiigi/xx)
-FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.19 AS xx-build
+### Build xx (original image: tonistiigi/xx)
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.20 AS xx-build
 
-# v1.5.0
-ENV XX_VERSION=b4e4c451c778822e6742bfc9d9a91d7c7d885c8a
+# v1.9.0
+ENV XX_VERSION=a5592eab7a57895e8d385394ff12241bc65ecd50
+
 RUN sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirrors.tuna.tsinghua.edu.cn/alpine#g' /etc/apk/repositories
+
 RUN apk add -U --no-cache git
 RUN git clone https://github.com/tonistiigi/xx && \
     cd xx && \
@@ -26,16 +28,23 @@ COPY --from=xx-build /out/ /usr/bin/
 
 ########################################################################################################################
 ### Get TagLib
-FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.19 AS taglib-build
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.20 AS taglib-build
 ARG TARGETPLATFORM
 ARG CROSS_TAGLIB_VERSION=2.1.1-1
 ENV CROSS_TAGLIB_RELEASES_URL=https://github.com/navidrome/cross-taglib/releases/download/v${CROSS_TAGLIB_VERSION}/
 
-COPY var/taglib-linux-amd64.tar.gz /tmp
-RUN mkdir /taglib && \
-    tar -xzf /tmp/taglib-linux-amd64.tar.gz -C /taglib
+# wget in busybox can't follow redirects
+RUN <<EOT
+    apk add --no-cache wget
+    PLATFORM=$(echo ${TARGETPLATFORM} | tr '/' '-')
+    FILE=taglib-${PLATFORM}.tar.gz
 
-RUN ls -la /taglib
+    DOWNLOAD_URL=${CROSS_TAGLIB_RELEASES_URL}${FILE}
+    wget ${DOWNLOAD_URL}
+
+    mkdir /taglib
+    tar -xzf ${FILE} -C /taglib
+EOT
 
 ########################################################################################################################
 ### Build Navidrome UI
@@ -57,7 +66,8 @@ COPY --from=ui /build /build
 
 ########################################################################################################################
 ### Build Navidrome binary
-FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/golang:1.24-bookworm AS base
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/golang:1.25-bookworm AS base
+
 RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
     sed -i 's|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
 
@@ -66,7 +76,7 @@ COPY --from=xx / /
 WORKDIR /workspace
 
 FROM --platform=$BUILDPLATFORM base AS build
-COPY --from=taglib-build /taglib /taglib
+
 # Install build dependencies for the target platform
 ARG TARGETPLATFORM
 
@@ -88,7 +98,7 @@ RUN --mount=type=bind,source=. \
     --mount=from=osxcross,src=/osxcross/SDK,target=/xx-sdk,ro \
     --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/go/pkg/mod \
-    <<EOT
+    --mount=from=taglib-build,target=/taglib,src=/taglib,ro <<EOT
 
     # Setup CGO cross-compilation environment
     xx-go --wrap
@@ -121,7 +131,7 @@ COPY --from=build /out /
 
 ########################################################################################################################
 ### Build Final Image
-FROM m.daocloud.io/docker.io/library/alpine:3.19 AS final
+FROM m.daocloud.io/docker.io/library/alpine:3.20 AS final
 LABEL maintainer="deluan@navidrome.org"
 LABEL org.opencontainers.image.source="https://github.com/navidrome/navidrome"
 
@@ -137,7 +147,6 @@ ENV ND_MUSICFOLDER=/music
 ENV ND_DATAFOLDER=/data
 ENV ND_CONFIGFILE=/data/navidrome.toml
 ENV ND_PORT=4533
-ENV GODEBUG="asyncpreemptoff=1"
 RUN touch /.nddockerenv
 
 EXPOSE ${ND_PORT}
