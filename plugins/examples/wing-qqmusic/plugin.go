@@ -1,37 +1,33 @@
-//1go:build wasip1
-
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/url"
 	"strings"
 
-	"github.com/navidrome/navidrome/plugins/api"
-	"github.com/navidrome/navidrome/plugins/host/http"
+	"github.com/navidrome/navidrome/plugins/pdk/go/metadata"
+	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 )
 
 const (
-	requestTimeoutMs = 5000
+	requestTimeoutMs = 10000
 )
 
 var (
-	ErrNotFound       = api.ErrNotFound
-	ErrNotImplemented = api.ErrNotImplemented
-
-	client         = http.NewHttpService()
-	baseURL string = "http://192.168.3.50:12000"
+	ErrNotFound        = errors.New("not found")
+	baseURL     string = "http://192.168.3.50:12000"
 )
 
 type AlbumInfoWithImage struct {
-	api.AlbumInfo
-	Images []*api.ExternalImage `json:"images,omitempty"`
+	metadata.AlbumInfoResponse
+	Images []metadata.ImageInfo `json:"images,omitempty"`
 }
 
+// 安装 https://github.com/WebAssembly/binaryen/releases
+// 安装 https://tinygo.org/
+// 打包 tinygo build -o plugin.wasm -target wasip1 -buildmode=c-shared .
 type WingQQMusicAgent struct{}
 
 //func (WingQQMusicAgent) OnInit(ctx context.Context, req *api.InitRequest) (*api.InitResponse, error) {
@@ -47,84 +43,69 @@ type WingQQMusicAgent struct{}
 //}
 
 // GetArtistURL is not implemented for Wing QQ Music
-func (WingQQMusicAgent) GetArtistURL(ctx context.Context, req *api.ArtistURLRequest) (*api.ArtistURLResponse, error) {
-	if strings.HasPrefix(req.GetMbid(), "qq-") {
-		return &api.ArtistURLResponse{Url: "https://y.qq.com/n/ryqq/singer/" + req.GetMbid()[3:]}, nil
+func (*WingQQMusicAgent) GetArtistURL(input metadata.ArtistRequest) (*metadata.ArtistURLResponse, error) {
+	if strings.HasPrefix(input.MBID, "qq-") {
+		return &metadata.ArtistURLResponse{URL: "https://y.qq.com/n/ryqq/singer/" + input.MBID[3:]}, nil
 	}
 	return nil, ErrNotFound
 }
 
-// GetArtistBiography is not implemented for Wing QQ Music
-func (WingQQMusicAgent) GetArtistBiography(context.Context, *api.ArtistBiographyRequest) (*api.ArtistBiographyResponse, error) {
-	return nil, ErrNotImplemented
-}
-
 // GetArtistImages fetches artist images from Wing QQ Music API
-func (WingQQMusicAgent) GetArtistImages(ctx context.Context, req *api.ArtistImageRequest) (*api.ArtistImageResponse, error) {
+func (*WingQQMusicAgent) GetArtistImages(input metadata.ArtistRequest) (*metadata.ArtistImagesResponse, error) {
 	params := map[string]string{
-		"id":   req.Id,
-		"name": req.Name,
-		"mbid": req.Mbid,
+		"id":   input.ID,
+		"name": input.Name,
+		"mbid": input.MBID,
 	}
 
-	resp, err := get(ctx, "/nv_artist_images", params)
+	resp, err := get("/nv_artist_images", params)
 	if err != nil {
 		return nil, err
 	}
 
-	var images []*api.ExternalImage
-	if err := json.Unmarshal(resp.Body, &images); err != nil {
+	var images []metadata.ImageInfo
+	if err := json.Unmarshal(resp.Body(), &images); err != nil {
 		return nil, fmt.Errorf("failed to decode artist images response: %v", err)
 	}
 
-	return &api.ArtistImageResponse{Images: images}, nil
+	return &metadata.ArtistImagesResponse{Images: images}, nil
 }
 
-// Not implemented methods
-func (WingQQMusicAgent) GetArtistMBID(context.Context, *api.ArtistMBIDRequest) (*api.ArtistMBIDResponse, error) {
-	return nil, ErrNotImplemented
-}
-func (WingQQMusicAgent) GetSimilarArtists(context.Context, *api.ArtistSimilarRequest) (*api.ArtistSimilarResponse, error) {
-	return nil, ErrNotImplemented
-}
-func (WingQQMusicAgent) GetArtistTopSongs(context.Context, *api.ArtistTopSongsRequest) (*api.ArtistTopSongsResponse, error) {
-	return nil, ErrNotImplemented
-}
-
-func getAlbumInfo(ctx context.Context, mbid string) (*AlbumInfoWithImage, error) {
+func getAlbumInfo(mbid string) (*AlbumInfoWithImage, error) {
 	params := map[string]string{
 		"mbid": mbid,
 	}
 
-	resp, err := get(ctx, "/nv_album", params)
+	resp, err := get("/nv_album", params)
 	if err != nil {
 		return nil, err
 	}
 
 	var albumInfo AlbumInfoWithImage
-	if err := json.Unmarshal(resp.Body, &albumInfo); err != nil {
+	if err := json.Unmarshal(resp.Body(), &albumInfo); err != nil {
 		return nil, fmt.Errorf("failed to decode album info response: %v", err)
 	}
 	return &albumInfo, nil
 }
-func (WingQQMusicAgent) GetAlbumInfo(ctx context.Context, req *api.AlbumInfoRequest) (*api.AlbumInfoResponse, error) {
-	resp, err := getAlbumInfo(ctx, req.Mbid)
+
+func (*WingQQMusicAgent) GetAlbumInfo(input metadata.AlbumRequest) (*metadata.AlbumInfoResponse, error) {
+	resp, err := getAlbumInfo(input.MBID)
 	if err != nil {
 		return nil, err
 	}
-	return &api.AlbumInfoResponse{Info: &resp.AlbumInfo}, nil
+	return &resp.AlbumInfoResponse, nil
 }
 
-func (WingQQMusicAgent) GetAlbumImages(ctx context.Context, req *api.AlbumImagesRequest) (*api.AlbumImagesResponse, error) {
-	resp, err := getAlbumInfo(ctx, req.Mbid)
+func (*WingQQMusicAgent) GetAlbumImages(input metadata.AlbumRequest) (*metadata.AlbumImagesResponse, error) {
+	resp, err := getAlbumInfo(input.MBID)
 	if err != nil {
 		return nil, err
 	}
-	return &api.AlbumImagesResponse{Images: resp.Images}, nil
+	return &metadata.AlbumImagesResponse{Images: resp.Images}, nil
 }
 
 // Helper method to make HTTP GET requests
-func get(ctx context.Context, path string, params map[string]string) (*http.HttpResponse, error) {
+func get(path string, params map[string]string) (*pdk.HTTPResponse, error) {
 	if baseURL == "" {
 		return nil, errors.New("baseURL not configured")
 	}
@@ -144,29 +125,19 @@ func get(ctx context.Context, path string, params map[string]string) (*http.Http
 	}
 
 	// Make HTTP request
-	req := &http.HttpRequest{
-		Url:       u.String(),
-		TimeoutMs: requestTimeoutMs,
+	req := pdk.NewHTTPRequest(pdk.MethodGet, u.String())
+
+	resp := req.Send()
+
+	if resp.Status() != 200 {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.Status(), string(resp.Body()))
 	}
 
-	resp, err := client.Get(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.Status != 200 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.Status, string(resp.Body))
-	}
-
-	return resp, nil
+	return &resp, nil
 }
 
 func main() {}
 
 func init() {
-	// Configure logging: No timestamps, no source file/line
-	log.SetFlags(log.Ldate | log.Ltime | log.Llongfile)
-	log.SetPrefix("[WingQQMusic] ")
-
-	api.RegisterMetadataAgent(WingQQMusicAgent{})
+	metadata.Register(&WingQQMusicAgent{})
 }
