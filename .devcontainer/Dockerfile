@@ -14,7 +14,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends ffmpeg
 
 # Install TagLib from cross-taglib releases
-ARG CROSS_TAGLIB_VERSION="2.1.1-1"
+ARG CROSS_TAGLIB_VERSION="2.2.0-1"
 ARG TARGETARCH
 RUN DOWNLOAD_ARCH="linux-${TARGETARCH}" \
     && wget -q "https://github.com/navidrome/cross-taglib/releases/download/v${CROSS_TAGLIB_VERSION}/taglib-${DOWNLOAD_ARCH}.tar.gz" -O /tmp/cross-taglib.tar.gz \
@@ -22,6 +22,8 @@ RUN DOWNLOAD_ARCH="linux-${TARGETARCH}" \
     && mv /usr/include/taglib/* /usr/include/ \
     && rmdir /usr/include/taglib \
     && rm /tmp/cross-taglib.tar.gz /usr/provenance.json
+
+ENV CGO_CFLAGS_ALLOW="--define-prefix"
 
 # [Optional] Uncomment this line to install global node packages.
 # RUN su vscode -c "source /usr/local/share/nvm/nvm.sh && npm install -g <your-package-here>" 2>&1

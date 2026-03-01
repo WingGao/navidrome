@@ -20,6 +20,7 @@ const defaultConfig = {
   defaultTheme: 'Dark',
   defaultLanguage: '',
   defaultUIVolume: 100,
+  uiSearchDebounceMs: 200,
   enableUserEditing: true,
   enableSharing: true,
   shareURL: '',
@@ -38,6 +39,7 @@ const defaultConfig = {
   publicBaseUrl: '/share',
   separator: '/',
   enableInspect: true,
+  pluginsEnabled: true,
 }
 
 let config

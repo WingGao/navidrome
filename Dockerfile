@@ -30,7 +30,7 @@ COPY --from=xx-build /out/ /usr/bin/
 ### Get TagLib
 FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/alpine:3.20 AS taglib-build
 ARG TARGETPLATFORM
-ARG CROSS_TAGLIB_VERSION=2.1.1-1
+ARG CROSS_TAGLIB_VERSION=2.2.0-1
 ENV CROSS_TAGLIB_RELEASES_URL=https://github.com/navidrome/cross-taglib/releases/download/v${CROSS_TAGLIB_VERSION}/
 
 # wget in busybox can't follow redirects
@@ -66,7 +66,7 @@ COPY --from=ui /build /build
 
 ########################################################################################################################
 ### Build Navidrome binary
-FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/golang:1.25-bookworm AS base
+FROM --platform=$BUILDPLATFORM m.daocloud.io/docker.io/library/golang:1.25-trixie AS base
 
 RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
     sed -i 's|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
@@ -103,6 +103,7 @@ RUN --mount=type=bind,source=. \
     # Setup CGO cross-compilation environment
     xx-go --wrap
     export CGO_ENABLED=1
+    export CGO_CFLAGS_ALLOW="--define-prefix"
     export PKG_CONFIG_PATH=/taglib/lib/pkgconfig
     cat $(go env GOENV)
 
@@ -117,7 +118,7 @@ RUN --mount=type=bind,source=. \
         export EXT=".exe"
     fi
 
-    go build -tags=netgo -ldflags="${LD_EXTRA} -w -s \
+    go build -tags=netgo,sqlite_fts5 -ldflags="${LD_EXTRA} -w -s \
         -X github.com/navidrome/navidrome/consts.gitSha=${GIT_SHA} \
         -X github.com/navidrome/navidrome/consts.gitTag=${GIT_TAG}" \
         -o /out/navidrome${EXT} .

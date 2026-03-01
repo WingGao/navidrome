@@ -36,7 +36,8 @@
         "bitDepth": "Profundidad de bits",
         "sampleRate": "Frecuencia de muestreo",
         "missing": "Faltante",
-        "libraryName": "Biblioteca"
+        "libraryName": "Biblioteca",
+        "composer": "Compositor"
       },
       "actions": {
         "addToQueue": "Reproducir después",
@@ -46,7 +47,8 @@
         "download": "Descarga",
         "playNext": "Siguiente",
         "info": "Obtener información",
-        "showInPlaylist": "Mostrar en la lista de reproducción"
+        "showInPlaylist": "Mostrar en la lista de reproducción",
+        "instantMix": "Mezcla instantánea"
       }
     },
     "album": {
@@ -114,19 +116,19 @@
         "missing": "Faltante"
       },
       "roles": {
-        "albumartist": "Artista del álbum",
-        "artist": "Artista",
-        "composer": "Compositor",
-        "conductor": "Director de orquesta",
-        "lyricist": "Letrista",
-        "arranger": "Arreglista",
-        "producer": "Productor",
-        "director": "Director",
-        "engineer": "Ingeniero de sonido",
-        "mixer": "Mezclador",
-        "remixer": "Remixer",
-        "djmixer": "DJ Mixer",
-        "performer": "Intérprete",
+        "albumartist": "Artista del álbum |||| Artistas del álbum",
+        "artist": "Artista |||| Artistas",
+        "composer": "Compositor |||| Compositores",
+        "conductor": "Director de orquesta |||| Directores de orquesta",
+        "lyricist": "Letrista |||| Letristas",
+        "arranger": "Arreglista |||| Arreglistas",
+        "producer": "Productor |||| Productores",
+        "director": "Director |||| Directores",
+        "engineer": "Ingeniero de sonido |||| Ingenieros de sonido",
+        "mixer": "Mezclador |||| Mezcladores",
+        "remixer": "Remezclador |||| Remezcladores",
+        "djmixer": "DJ Mezclador |||| DJ Mezcladores",
+        "performer": "Intérprete |||| Intérpretes",
         "maincredit": "Artista del álbum o Artista |||| Artistas del álbum o Artistas"
       },
       "actions": {
@@ -189,7 +191,7 @@
       "fields": {
         "name": "Nombre",
         "targetFormat": "Formato de destino",
-        "defaultBitRate": "Tasa de bits default",
+        "defaultBitRate": "Tasa de bits por defecto",
         "command": "Comando"
       }
     },
@@ -239,9 +241,9 @@
       }
     },
     "share": {
-      "name": "Compartir",
+      "name": "Compartir |||| Compartidos",
       "fields": {
-        "username": "Nombre de usuario",
+        "username": "Compartido por",
         "url": "URL",
         "description": "Descripción",
         "contents": "Contenido",
@@ -256,7 +258,7 @@
       }
     },
     "missing": {
-      "name": "Faltante",
+      "name": "Fichero faltante |||| Ficheros faltantes",
       "fields": {
         "path": "Ruta",
         "size": "Tamaño",
@@ -270,7 +272,7 @@
       "notifications": {
         "removed": "Eliminado"
       },
-      "empty": "No hay archivos perdidos"
+      "empty": "No faltan archivos"
     },
     "library": {
       "name": "Biblioteca |||| Bibliotecas",
@@ -290,7 +292,7 @@
         "totalMissingFiles": "Archivos faltantes",
         "totalSize": "Tamaño total",
         "totalDuration": "Duración",
-        "defaultNewUsers": "Valor por defecto para los nuevos usuarios",
+        "defaultNewUsers": "Por defecto para nuevos usuarios",
         "createdAt": "Creado",
         "updatedAt": "Actualizado"
       },
@@ -327,6 +329,80 @@
         "deleteConfirm": "¿Estás seguro/a de que quieres eliminar esta biblioteca? Esto eliminará todos los datos asociados y el acceso de les usuaries.",
         "scanInProgress": "Escaneo en curso...",
         "noLibrariesAssigned": "No hay bibliotecas asignadas a este usuario"
+      }
+    },
+    "plugin": {
+      "name": "Plugin |||| Plugins",
+      "fields": {
+        "id": "ID",
+        "name": "Nombre",
+        "description": "Descripción",
+        "version": "Versión",
+        "author": "Autor",
+        "website": "Web",
+        "permissions": "Permisos",
+        "enabled": "Activado",
+        "status": "Estado",
+        "path": "Ruta",
+        "lastError": "Error",
+        "hasError": "Error",
+        "updatedAt": "Actualizado",
+        "createdAt": "Instalado",
+        "configKey": "Clave",
+        "configValue": "Valor",
+        "allUsers": "Permitir todos los usuarios",
+        "selectedUsers": "Usuarios seleccionados",
+        "allLibraries": "Permitir todas las bibliotecas",
+        "selectedLibraries": "Bibliotecas seleccionadas"
+      },
+      "sections": {
+        "status": "Estado",
+        "info": "Información del Plugin",
+        "configuration": "Configuración",
+        "manifest": "Manifiesto",
+        "usersPermission": "Permiso del usuario",
+        "libraryPermission": "Permiso de la biblioteca"
+      },
+      "status": {
+        "enabled": "Activado",
+        "disabled": "Deshabilitado"
+      },
+      "actions": {
+        "enable": "Activar",
+        "disable": "Desactivar",
+        "disabledDueToError": "Corrige el error antes de activar",
+        "disabledUsersRequired": "Selecciona usuarios antes de activar",
+        "disabledLibrariesRequired": "Selecciona bibliotecas antes de activar",
+        "addConfig": "Añadir configuración",
+        "rescan": "Reescanear"
+      },
+      "notifications": {
+        "enabled": "Plugin activado",
+        "disabled": "Plugin deshabilitado",
+        "updated": "Plugin actualizado",
+        "error": "Error al actualizar el plugin"
+      },
+      "validation": {
+        "invalidJson": "La configuración debe ser un JSON válido"
+      },
+      "messages": {
+        "configHelp": "Configura el plugin utilizando pares de clave-valor. Déjalo en blanco si el plugin no requiere configuración.",
+        "clickPermissions": "Haz clic en un permiso para ver los detalles",
+        "noConfig": "No hay configuración establecida",
+        "allUsersHelp": "Cuando se active, el plugin tendrá acceso a todos los usuarios, incluidos los que se creen en el futuro.",
+        "noUsers": "Ningún usuario seleccionado",
+        "permissionReason": "Razón",
+        "usersRequired": "Este plugin requiere acceso a la información de los usuarios. Selecciona a qué usuarios puede acceder el plugin, o activa 'Permitir todos los usuarios'.",
+        "allLibrariesHelp": "Cuando se active, el plugin tendrá acceso a todas las bibliotecas, incluidas las que se creen en el futuro.",
+        "noLibraries": "Ninguna biblioteca seleccionada",
+        "librariesRequired": "Este plugin requiere acceso a la información de las bibliotecas. Selecciona a qué bibliotecas puede acceder el plugin, o activa 'Permitir todas las bibliotecas'.",
+        "requiredHosts": "Hosts requeridos",
+        "configValidationError": "La validación de la configuración falló:",
+        "schemaRenderError": "No se pudo renderizar el formulario de configuración. Es posible que el esquema del complemento no sea válido."
+      },
+      "placeholders": {
+        "configKey": "clave",
+        "configValue": "valor"
       }
     }
   },
@@ -494,9 +570,9 @@
       "musicbrainz": "Ver en MusicBrainz"
     },
     "lastfmLink": "Leer más...",
-    "listenBrainzLinkSuccess": "Se ha conectado correctamente a ListenBrainz y se activo el scrobbling como el usuario: %{user}",
+    "listenBrainzLinkSuccess": "Se ha conectado correctamente a ListenBrainz y se activó el scrobbling como el usuario: %{user}",
     "listenBrainzLinkFailure": "No se pudo conectar con ListenBrainz: %{error}",
-    "listenBrainzUnlinkSuccess": "Se desconecto ListenBrainz y se desactivo el scrobbling",
+    "listenBrainzUnlinkSuccess": "Se desconectó ListenBrainz y se desactivó el scrobbling",
     "listenBrainzUnlinkFailure": "No se pudo desconectar ListenBrainz",
     "downloadOriginalFormat": "Descargar formato original",
     "shareOriginalFormat": "Compartir formato original",
@@ -506,12 +582,13 @@
     "shareFailure": "Error al copiar la URL %{url} al portapapeles",
     "downloadDialogTitle": "Descargar %{resource} '%{name}' (%{size})",
     "shareCopyToClipboard": "Copiar al portapapeles: Ctrl+C, Intro",
-    "remove_missing_title": "Eliminar elemento faltante",
+    "remove_missing_title": "Eliminar archivos faltantes",
     "remove_missing_content": "¿Realmente desea eliminar los archivos faltantes seleccionados de la base de datos? Esto eliminará permanentemente cualquier referencia a ellos, incluidas sus reproducciones y valoraciones.",
-    "remove_all_missing_title": "Eliminar todos los archivos perdidos",
+    "remove_all_missing_title": "Eliminar todos los archivos faltantes",
     "remove_all_missing_content": "¿Realmente desea eliminar todos los archivos faltantes de la base de datos? Esto eliminará permanentemente cualquier referencia a ellos, incluidas sus reproducciones y valoraciones.",
     "noSimilarSongsFound": "No se encontraron canciones similares",
-    "noTopSongsFound": "No se encontraron canciones destacadas"
+    "noTopSongsFound": "No se encontraron canciones destacadas",
+    "startingInstantMix": "Cargando la mezcla instantánea..."
   },
   "menu": {
     "library": "Biblioteca",
@@ -530,9 +607,9 @@
         "replaygain": "Modo de ReplayGain",
         "preAmp": "ReplayGain PreAmp (dB)",
         "gain": {
-          "none": "Ninguno",
-          "album": "Álbum",
-          "track": "Pista"
+          "none": "Desactivado",
+          "album": "Ganancia del álbum",
+          "track": "Ganancia de pista"
         },
         "lastfmNotConfigured": "La clave API de Last.fm no está configurada"
       }

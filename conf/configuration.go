@@ -1,11 +1,13 @@
 package conf
 
 import (
+	"cmp"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -57,7 +59,8 @@ type configOptions struct {
 	SmartPlaylistRefreshDelay       time.Duration
 	AutoTranscodeDownload           bool
 	DefaultDownsamplingFormat       string
-	SearchFullString                bool
+	Search                          searchOptions `json:",omitzero"`
+	SimilarSongsMatchThreshold      int
 	RecentlyAddedByModTime          bool
 	PreferSortTags                  bool
 	IgnoredArticles                 string
@@ -80,6 +83,7 @@ type configOptions struct {
 	DefaultTheme                    string
 	DefaultLanguage                 string
 	DefaultUIVolume                 int
+	UISearchDebounceMs              int
 	EnableReplayGain                bool
 	EnableCoverAnimation            bool
 	EnableNowPlaying                bool
@@ -90,7 +94,6 @@ type configOptions struct {
 	PasswordEncryptionKey           string
 	ExtAuth                         extAuthOptions
 	Plugins                         pluginsOptions
-	PluginConfig                    map[string]map[string]string
 	HTTPHeaders                     httpHeaderOptions   `json:",omitzero"`
 	Prometheus                      prometheusOptions   `json:",omitzero"`
 	Scanner                         scannerOptions      `json:",omitzero"`
@@ -128,6 +131,7 @@ type configOptions struct {
 	DevExternalScanner                bool
 	DevScannerThreads                 uint
 	DevSelectiveWatcher               bool
+	DevLegacyEmbedImage               bool
 	DevInsightsInitialDelay           time.Duration
 	DevEnablePlayerInsights           bool
 	DevEnablePluginsInsights          bool
@@ -152,9 +156,12 @@ type scannerOptions struct {
 
 type subsonicOptions struct {
 	AppendSubtitle        bool
+	AppendAlbumVersion    bool
 	ArtistParticipations  bool
 	DefaultReportRealPath bool
+	EnableAverageRating   bool
 	LegacyClients         string
+	MinimalClients        string
 }
 
 type TagConf struct {
@@ -168,25 +175,33 @@ type TagConf struct {
 
 type lastfmOptions struct {
 	Enabled                 bool
-	ApiKey                  string
-	Secret                  string
+	ApiKey                  string //nolint:gosec
+	Secret                  string //nolint:gosec
 	Language                string
 	ScrobbleFirstArtistOnly bool
+
+	// Computed values
+	Languages []string // Computed from Language, split by comma
 }
 
 type spotifyOptions struct {
 	ID     string
-	Secret string
+	Secret string //nolint:gosec
 }
 
 type deezerOptions struct {
 	Enabled  bool
 	Language string
+
+	// Computed values
+	Languages []string // Computed from Language, split by comma
 }
 
 type listenBrainzOptions struct {
-	Enabled bool
-	BaseURL string
+	Enabled         bool
+	BaseURL         string
+	ArtistAlgorithm string
+	TrackAlgorithm  string
 }
 
 type wingOptions struct {
@@ -201,7 +216,7 @@ type httpHeaderOptions struct {
 type prometheusOptions struct {
 	Enabled     bool
 	MetricsPath string
-	Password    string
+	Password    string //nolint:gosec
 }
 
 type AudioDeviceDefinition []string
@@ -232,14 +247,22 @@ type inspectOptions struct {
 }
 
 type pluginsOptions struct {
-	Enabled   bool
-	Folder    string
-	CacheSize string
+	Enabled    bool
+	Folder     string
+	CacheSize  string
+	AutoReload bool
+	LogLevel   string
 }
 
 type extAuthOptions struct {
 	TrustedSources string
 	UserHeader     string
+	LogoutURL      string
+}
+
+type searchOptions struct {
+	Backend    string
+	FullString bool
 }
 
 var (
@@ -330,10 +353,13 @@ func Load(noConfigDump bool) {
 		validateBackupSchedule,
 		validatePlaylistsPath,
 		validatePurgeMissingOption,
+		validateURL("ExtAuth.LogoutURL", Server.ExtAuth.LogoutURL),
 	)
 	if err != nil {
 		os.Exit(1)
 	}
+
+	Server.Search.Backend = normalizeSearchBackend(Server.Search.Backend)
 
 	if Server.BaseURL != "" {
 		u, err := url.Parse(Server.BaseURL)
@@ -370,13 +396,20 @@ func Load(noConfigDump bool) {
 		disableExternalServices()
 	}
 
-	if Server.Scanner.Extractor != consts.DefaultScannerExtractor {
-		log.Warn(fmt.Sprintf("Extractor '%s' is not implemented, using 'taglib'", Server.Scanner.Extractor))
-		Server.Scanner.Extractor = consts.DefaultScannerExtractor
-	}
+	// Make sure we don't have empty PIDs
+	Server.PID.Album = cmp.Or(Server.PID.Album, consts.DefaultAlbumPID)
+	Server.PID.Track = cmp.Or(Server.PID.Track, consts.DefaultTrackPID)
+
+	// Parse LastFM.Language into Languages slice (comma-separated, with fallback to DefaultInfoLanguage)
+	Server.LastFM.Languages = parseLanguages(Server.LastFM.Language)
+
+	// Parse Deezer.Language into Languages slice (comma-separated, with fallback to DefaultInfoLanguage)
+	Server.Deezer.Languages = parseLanguages(Server.Deezer.Language)
+
 	logDeprecatedOptions("Scanner.GenreSeparators", "")
 	logDeprecatedOptions("Scanner.GroupAlbumReleases", "")
 	logDeprecatedOptions("DevEnableBufferedScrobble", "") // Deprecated: Buffered scrobbling is now always enabled and this option is ignored
+	logDeprecatedOptions("SearchFullString", "Search.FullString")
 	logDeprecatedOptions("ReverseProxyWhitelist", "ExtAuth.TrustedSources")
 	logDeprecatedOptions("ReverseProxyUserHeader", "ExtAuth.UserHeader")
 	logDeprecatedOptions("HTTPSecurityHeaders.CustomFrameOptionsValue", "HTTPHeaders.FrameOptions")
@@ -419,7 +452,7 @@ func mapDeprecatedOption(legacyName, newName string) {
 func parseIniFileConfiguration() {
 	cfgFile := viper.ConfigFileUsed()
 	if strings.ToLower(filepath.Ext(cfgFile)) == ".ini" {
-		var iniConfig map[string]interface{}
+		var iniConfig map[string]any
 		err := viper.Unmarshal(&iniConfig)
 		if err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, "FATAL: Error parsing config:", err)
@@ -452,7 +485,7 @@ func disableExternalServices() {
 }
 
 func validatePlaylistsPath() error {
-	for _, path := range strings.Split(Server.PlaylistsPath, string(filepath.ListSeparator)) {
+	for path := range strings.SplitSeq(Server.PlaylistsPath, string(filepath.ListSeparator)) {
 		_, err := doublestar.Match(path, "")
 		if err != nil {
 			log.Error("Invalid PlaylistsPath", "path", path, err)
@@ -462,15 +495,25 @@ func validatePlaylistsPath() error {
 	return nil
 }
 
-func validatePurgeMissingOption() error {
-	allowedValues := []string{consts.PurgeMissingNever, consts.PurgeMissingAlways, consts.PurgeMissingFull}
-	valid := false
-	for _, v := range allowedValues {
-		if v == Server.Scanner.PurgeMissing {
-			valid = true
-			break
+// parseLanguages parses a comma-separated language string into a slice.
+// It trims whitespace from each entry and ensures at least [DefaultInfoLanguage] is returned.
+func parseLanguages(lang string) []string {
+	var languages []string
+	for l := range strings.SplitSeq(lang, ",") {
+		l = strings.TrimSpace(l)
+		if l != "" {
+			languages = append(languages, l)
 		}
 	}
+	if len(languages) == 0 {
+		return []string{consts.DefaultInfoLanguage}
+	}
+	return languages
+}
+
+func validatePurgeMissingOption() error {
+	allowedValues := []string{consts.PurgeMissingNever, consts.PurgeMissingAlways, consts.PurgeMissingFull}
+	valid := slices.Contains(allowedValues, Server.Scanner.PurgeMissing)
 	if !valid {
 		err := fmt.Errorf("invalid Scanner.PurgeMissing value: '%s'. Must be one of: %v", Server.Scanner.PurgeMissing, allowedValues)
 		log.Error(err.Error())
@@ -512,6 +555,44 @@ func validateSchedule(schedule, field string) (string, error) {
 		c.Remove(id)
 	}
 	return schedule, err
+}
+
+// validateURL checks if the provided URL is valid and has either http or https scheme.
+// It returns a function that can be used as a hook to validate URLs in the config.
+func validateURL(optionName, optionURL string) func() error {
+	return func() error {
+		if optionURL == "" {
+			return nil
+		}
+		u, err := url.Parse(optionURL)
+		if err != nil {
+			log.Error(fmt.Sprintf("Invalid %s: it could not be parsed", optionName), "url", optionURL, "err", err)
+			return err
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			err := fmt.Errorf("invalid scheme for %s: '%s'. Only 'http' and 'https' are allowed", optionName, u.Scheme)
+			log.Error(err.Error())
+			return err
+		}
+		// Require an absolute URL with a non-empty host and no opaque component.
+		if u.Host == "" || u.Opaque != "" {
+			err := fmt.Errorf("invalid %s: '%s'. A full http(s) URL with a non-empty host is required", optionName, optionURL)
+			log.Error(err.Error())
+			return err
+		}
+		return nil
+	}
+}
+
+func normalizeSearchBackend(value string) string {
+	v := strings.ToLower(strings.TrimSpace(value))
+	switch v {
+	case "fts", "legacy":
+		return v
+	default:
+		log.Error("Invalid Search.Backend value, falling back to 'fts'", "value", value)
+		return "fts"
+	}
 }
 
 // AddHook is used to register initialization code that should run as soon as the config is loaded
@@ -560,7 +641,9 @@ func setViperDefaults() {
 	viper.SetDefault("enablemediafilecoverart", true)
 	viper.SetDefault("autotranscodedownload", false)
 	viper.SetDefault("defaultdownsamplingformat", consts.DefaultDownsamplingFormat)
-	viper.SetDefault("searchfullstring", false)
+	viper.SetDefault("search.fullstring", false)
+	viper.SetDefault("search.backend", "fts")
+	viper.SetDefault("similarsongsmatchthreshold", 85)
 	viper.SetDefault("recentlyaddedbymodtime", false)
 	viper.SetDefault("prefersorttags", false)
 	viper.SetDefault("ignoredarticles", "The El La Los Las Le Les Os As O A")
@@ -578,6 +661,7 @@ func setViperDefaults() {
 	viper.SetDefault("defaulttheme", "Dark")
 	viper.SetDefault("defaultlanguage", "")
 	viper.SetDefault("defaultuivolume", consts.DefaultUIVolume)
+	viper.SetDefault("uisearchdebouncems", consts.DefaultUISearchDebounceMs)
 	viper.SetDefault("enablereplaygain", true)
 	viper.SetDefault("enablecoveranimation", true)
 	viper.SetDefault("enablenowplaying", true)
@@ -593,6 +677,7 @@ func setViperDefaults() {
 	viper.SetDefault("passwordencryptionkey", "")
 	viper.SetDefault("extauth.userheader", "Remote-User")
 	viper.SetDefault("extauth.trustedsources", "")
+	viper.SetDefault("extauth.logouturl", "")
 	viper.SetDefault("prometheus.enabled", false)
 	viper.SetDefault("prometheus.metricspath", consts.PrometheusDefaultPath)
 	viper.SetDefault("prometheus.password", "")
@@ -611,21 +696,26 @@ func setViperDefaults() {
 	viper.SetDefault("scanner.followsymlinks", true)
 	viper.SetDefault("scanner.purgemissing", consts.PurgeMissingNever)
 	viper.SetDefault("subsonic.appendsubtitle", true)
+	viper.SetDefault("subsonic.appendalbumversion", true)
 	viper.SetDefault("subsonic.artistparticipations", false)
 	viper.SetDefault("subsonic.defaultreportrealpath", false)
-	viper.SetDefault("subsonic.legacyclients", "DSub,SubMusic")
+	viper.SetDefault("subsonic.enableaveragerating", true)
+	viper.SetDefault("subsonic.legacyclients", "DSub")
+	viper.SetDefault("subsonic.minimalclients", "SubMusic")
 	viper.SetDefault("agents", "lastfm,spotify,deezer")
 	viper.SetDefault("lastfm.enabled", true)
-	viper.SetDefault("lastfm.language", "en")
+	viper.SetDefault("lastfm.language", consts.DefaultInfoLanguage)
 	viper.SetDefault("lastfm.apikey", "")
 	viper.SetDefault("lastfm.secret", "")
 	viper.SetDefault("lastfm.scrobblefirstartistonly", false)
 	viper.SetDefault("spotify.id", "")
 	viper.SetDefault("spotify.secret", "")
 	viper.SetDefault("deezer.enabled", true)
-	viper.SetDefault("deezer.language", "en")
+	viper.SetDefault("deezer.language", consts.DefaultInfoLanguage)
 	viper.SetDefault("listenbrainz.enabled", true)
-	viper.SetDefault("listenbrainz.baseurl", "https://api.listenbrainz.org/1/")
+	viper.SetDefault("listenbrainz.baseurl", consts.DefaultListenBrainzBaseURL)
+	viper.SetDefault("listenbrainz.artistalgorithm", consts.DefaultListenBrainzArtistAlgorithm)
+	viper.SetDefault("listenbrainz.trackalgorithm", consts.DefaultListenBrainzTrackAlgorithm)
 	viper.SetDefault("enablescrobblehistory", true)
 	viper.SetDefault("httpheaders.frameoptions", "DENY")
 	viper.SetDefault("backup.path", "")
@@ -638,8 +728,9 @@ func setViperDefaults() {
 	viper.SetDefault("inspect.backloglimit", consts.RequestThrottleBacklogLimit)
 	viper.SetDefault("inspect.backlogtimeout", consts.RequestThrottleBacklogTimeout)
 	viper.SetDefault("plugins.folder", "")
-	viper.SetDefault("plugins.enabled", false)
-	viper.SetDefault("plugins.cachesize", "100MB")
+	viper.SetDefault("plugins.enabled", true)
+	viper.SetDefault("plugins.cachesize", "200MB")
+	viper.SetDefault("plugins.autoreload", false)
 
 	// DevFlags. These are used to enable/disable debugging and incomplete features
 	viper.SetDefault("devlogsourceline", false)
@@ -717,7 +808,7 @@ func getConfigFile(cfgFile string) string {
 	}
 	cfgFile = os.Getenv("ND_CONFIGFILE")
 	if cfgFile != "" {
-		if _, err := os.Stat(cfgFile); err == nil {
+		if _, err := os.Stat(cfgFile); err == nil { //nolint:gosec
 			return cfgFile
 		}
 	}
